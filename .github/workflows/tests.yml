@@ -44,5 +44,8 @@ jobs:
       - name: Run TestApp
         run: go test -run '^TestApp$' ./tests
 
+      - name: Run TestDB
+        run: go test -run '^TestDB$' ./tests
+
       - name: Stop local server
         cancel: server

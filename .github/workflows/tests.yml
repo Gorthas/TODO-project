@@ -50,5 +50,8 @@ jobs:
       - name: Run TestNextDate
         run: go test -run '^TestNextDate$' ./tests
 
+      - name: Run TestAddTask
+        run: go test -run '^TestAddTask$' ./tests
+
       - name: Stop local server
         cancel: server

@@ -61,5 +61,10 @@ jobs:
           go test -run '^TestTask$' ./tests
           go test -run '^TestEditTask$' ./tests
 
+      - name: Run TestDone & TestDelTask
+        run: |
+          go test -run '^TestDone$' ./tests
+          go test -run '^TestDelTask$' ./tests
+
       - name: Stop local server
         cancel: server

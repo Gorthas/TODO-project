@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -9,9 +10,12 @@ import (
 	"github.com/Gorthas/TODO-project/pkg/db"
 )
 
-func writeJSON(w http.ResponseWriter, data any) {
+func writeJSON(w http.ResponseWriter, code int, data any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	json.NewEncoder(w).Encode(data)
+	w.WriteHeader(code)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		log.Printf("error encoding JSON response: %v\n", err)
+	}
 }
 
 func checkDate(task *db.Task) error {
@@ -34,7 +38,7 @@ func checkDate(task *db.Task) error {
 		}
 	}
 
-	if afterNow(now, t) {
+	if isDateAfter(now, t) {
 		if task.Repeat == "" {
 			task.Date = now.Format(dateFormat)
 		} else {
@@ -49,21 +53,21 @@ func addTaskHandler(w http.ResponseWriter, r *http.Request) {
 
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&task); err != nil {
-		writeJSON(w, map[string]any{
+		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": err.Error(),
 		})
 		return
 	}
 
 	if task.Title == "" {
-		writeJSON(w, map[string]any{
+		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": "empty Title",
 		})
 		return
 	}
 
 	if err := checkDate(&task); err != nil {
-		writeJSON(w, map[string]any{
+		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": err.Error(),
 		})
 		return
@@ -71,12 +75,12 @@ func addTaskHandler(w http.ResponseWriter, r *http.Request) {
 
 	id, err := db.AddTask(&task)
 	if err != nil {
-		writeJSON(w, map[string]any{
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": err.Error(),
 		})
 		return
 	}
-	writeJSON(w, map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"id": strconv.FormatInt(id, 10),
 	})
 }

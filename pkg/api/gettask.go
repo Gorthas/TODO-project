@@ -12,7 +12,7 @@ func getTaskHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 
 	if id == "" {
-		writeJSON(w, map[string]any{
+		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": "task ID is not specified",
 		})
 		return
@@ -20,16 +20,16 @@ func getTaskHandler(w http.ResponseWriter, r *http.Request) {
 
 	task, err := db.GetTask(id)
 	if errors.Is(err, sql.ErrNoRows) {
-		writeJSON(w, map[string]any{
+		writeJSON(w, http.StatusNotFound, map[string]any{
 			"error": "task not found",
 		})
 		return
 	}
 	if err != nil {
-		writeJSON(w, map[string]any{
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": err.Error(),
 		})
 		return
 	}
-	writeJSON(w, task)
+	writeJSON(w, http.StatusOK, task)
 }

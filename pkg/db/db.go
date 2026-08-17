@@ -23,11 +23,11 @@ CREATE INDEX idx_scheduler_date ON scheduler (date);
 `
 
 func Init(dbFile string) error {
-	var install bool
+	var needSchema bool
 
 	_, err := os.Stat(dbFile)
 	if errors.Is(err, os.ErrNotExist) {
-		install = true
+		needSchema = true
 	} else if err != nil {
 		return err
 	}
@@ -37,10 +37,19 @@ func Init(dbFile string) error {
 		return err
 	}
 
-	if install {
+	if needSchema {
 		if _, err = db.Exec(schema); err != nil {
+			// Если создание схемы не удалось, закрываем уже открытую БД
+			// до возврата ошибки из Init
+			if closeErr := db.Close(); closeErr != nil {
+				return errors.Join(err, closeErr)
+			}
 			return err
 		}
 	}
 	return nil
+}
+
+func Close() error {
+	return db.Close()
 }

@@ -5,6 +5,11 @@ import (
 	"time"
 )
 
+const (
+	storageDateFormat = "20060102"
+	inputDateFormat   = "02.01.2006"
+)
+
 type Task struct {
 	ID      string `json:"id"`
 	Date    string `json:"date"`
@@ -31,6 +36,8 @@ func Tasks(limit int, search string) ([]*Task, error) {
 	var getQuery string
 	var args []any
 
+	// Выбираем запрос по содержимому search: без поиска возвращаем ближайшие задачи,
+	// дату ищем по полю date, остальные значения — по title и comment
 	if search == "" {
 		args = append(args, limit)
 		getQuery = `
@@ -39,7 +46,7 @@ func Tasks(limit int, search string) ([]*Task, error) {
 		ORDER BY date
 		LIMIT ?
 	`
-	} else if date, err := time.Parse("02.01.2006", search); err != nil {
+	} else if date, err := time.Parse(inputDateFormat, search); err != nil {
 		pattern := "%" + search + "%"
 		args = append(args, pattern, pattern, limit)
 		getQuery = `
@@ -50,7 +57,7 @@ func Tasks(limit int, search string) ([]*Task, error) {
 		LIMIT ?
 	`
 	} else {
-		args = append(args, date.Format("20060102"), limit)
+		args = append(args, date.Format(storageDateFormat), limit)
 		getQuery = `
 		SELECT id, date, title, comment, repeat
 		FROM scheduler

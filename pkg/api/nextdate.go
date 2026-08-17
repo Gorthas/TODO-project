@@ -12,10 +12,12 @@ import (
 
 const dateFormat = "20060102"
 
-func afterNow(date, now time.Time) bool {
-	dateOnly := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
-	nowOnly := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	return dateOnly.After(nowOnly)
+// Сравниваем календарные даты без учета времени суток.
+// Возвращаем true, только если первая дата строго позже второй
+func isDateAfter(first, second time.Time) bool {
+	firstOnly := time.Date(first.Year(), first.Month(), first.Day(), 0, 0, 0, 0, time.UTC)
+	secondOnly := time.Date(second.Year(), second.Month(), second.Day(), 0, 0, 0, 0, time.UTC)
+	return firstOnly.After(secondOnly)
 }
 
 func NextDate(now time.Time, dstart string, repeat string) (string, error) {
@@ -27,18 +29,18 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 	parts := strings.Split(repeat, " ")
 
 	switch parts[0] {
-	case "y":
+	case "y": // ежегодный повтор
 		if len(parts) != 1 {
 			return "", errors.New("invalid interval format")
 		}
 
 		for {
 			date = date.AddDate(1, 0, 0)
-			if afterNow(date, now) {
+			if isDateAfter(date, now) {
 				return date.Format(dateFormat), nil
 			}
 		}
-	case "d":
+	case "d": // повтор через заданное количество дней
 		if len(parts) != 2 {
 			return "", errors.New("invalid interval format")
 		}
@@ -54,16 +56,18 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 
 		for {
 			date = date.AddDate(0, 0, days)
-			if afterNow(date, now) {
+			if isDateAfter(date, now) {
 				return date.Format(dateFormat), nil
 			}
 		}
-	case "w":
+	case "w": // повтор по выбранным дням недели
 		if len(parts) != 2 {
 			return "", errors.New("invalid interval format")
 		}
 
+		// Массив отмечает выбранные дни недели правила повтора
 		var allowed [8]bool
+
 		weekdayIndex := strings.Split(parts[1], ",")
 
 		for _, i := range weekdayIndex {
@@ -84,15 +88,18 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 			if weekday == 0 {
 				weekday = 7
 			}
-			if allowed[weekday] && afterNow(date, now) {
+			if allowed[weekday] && isDateAfter(date, now) {
 				return date.Format(dateFormat), nil
 			}
 		}
-	case "m":
+	case "m": // повтор по выбранным дням месяца и, при необходимости, месяцам
 		if len(parts) < 2 || len(parts) > 3 {
 			return "", errors.New("invalid interval format")
 		}
 
+		// Массивы отмечают выбранные дни и месяцы правила повтора.
+		// Последний (-1) и предпоследний (-2) дни месяца
+		// хранятся отдельно в соответствующих флагах
 		var day [32]bool
 		var month [13]bool
 		var lastDay bool
@@ -106,6 +113,8 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 				return "", errors.New("invalid days format")
 			}
 
+			// Обычные значения задают конкретный день месяца,
+			// -1 — последний день, -2 — предпоследний
 			switch {
 			case dayConv >= 1 && dayConv <= 31:
 				day[dayConv] = true
@@ -117,6 +126,9 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 				return "", errors.New("invalid days range")
 			}
 		}
+
+		// Если в правиле указан список месяцев, используем только их;
+		// иначе повтор разрешён во всех месяцах
 		if len(parts) == 3 {
 			monthIndex := strings.Split(parts[2], ",")
 
@@ -137,6 +149,36 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 			}
 		}
 
+		var possibleDate bool
+
+		// Проверяем, существует ли хотя бы одна дата для выбранных дней и месяцев,
+		// чтобы не уйти в бесконечный поиск. Берём високосный 2024 год,
+		// чтобы 29 февраля считалось возможной датой
+		for i := 1; i <= 12; i++ {
+			if month[i] {
+				daysInMonth := time.Date(
+					2024,
+					time.Month(i)+1,
+					0,
+					0, 0, 0, 0,
+					time.UTC,
+				).Day()
+				for j := 1; j <= 31; j++ {
+					if day[j] {
+						if j <= daysInMonth {
+							possibleDate = true
+						}
+					}
+				}
+			}
+		}
+		if !possibleDate && !lastDay && !penultDay {
+			return "", errors.New("invalid combination of day and month")
+		}
+
+		// Ищем ближайшую дату повтора, двигаясь по одному дню вперед.
+		// Для выбранного месяца проверяем обычные дни, а также
+		// последний (-1) и предпоследний (-2) дни месяца
 		for {
 			date = date.AddDate(0, 0, 1)
 
@@ -155,7 +197,7 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 				isPenultDay := penultDay && checkDay == (daysInMonth-1)
 
 				if day[checkDay] || isLastDay || isPenultDay {
-					if afterNow(date, now) {
+					if isDateAfter(date, now) {
 						return date.Format(dateFormat), nil
 					}
 				}
@@ -178,7 +220,8 @@ func nextDayHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		now, err = time.Parse(dateFormat, nowString)
 		if err != nil {
-			fmt.Fprintf(w, "error: %v\n", err)
+			message := fmt.Sprintf("error: %v", err)
+			http.Error(w, message, http.StatusBadRequest)
 			return
 		}
 	}
@@ -188,7 +231,8 @@ func nextDayHandler(w http.ResponseWriter, r *http.Request) {
 
 	nextDate, err := NextDate(now, date, repeat)
 	if err != nil {
-		fmt.Fprintf(w, "error: %v\n", err)
+		message := fmt.Sprintf("error: %v", err)
+		http.Error(w, message, http.StatusBadRequest)
 		return
 	}
 

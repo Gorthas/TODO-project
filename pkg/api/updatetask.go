@@ -12,21 +12,21 @@ func updateTaskHandler(w http.ResponseWriter, r *http.Request) {
 
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&task); err != nil {
-		writeJSON(w, map[string]any{
+		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": err.Error(),
 		})
 		return
 	}
 
 	if task.Title == "" {
-		writeJSON(w, map[string]any{
+		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": "empty Title",
 		})
 		return
 	}
 
 	if err := checkDate(&task); err != nil {
-		writeJSON(w, map[string]any{
+		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error": err.Error(),
 		})
 		return
@@ -34,10 +34,10 @@ func updateTaskHandler(w http.ResponseWriter, r *http.Request) {
 
 	err := db.UpdateTask(&task)
 	if err != nil {
-		writeJSON(w, map[string]any{
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": err.Error(),
 		})
 		return
 	}
-	writeJSON(w, map[string]any{})
+	writeJSON(w, http.StatusOK, map[string]any{})
 }

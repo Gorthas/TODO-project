@@ -5,29 +5,66 @@ on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        go-version: [1.24.x]
-  
+
+    env:
+      TODO_PORT: "7540"
+
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-    - name: Setup Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.24.x'
-        
-    - name: Display Go version
-      run: go version
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
 
-    - name: Install dependencies
-      run: go mod tidy
+      - name: Display Go version
+        run: go version
 
-    - name: Run local server
-      run: |
-        CGO_ENABLED=0 GOOS=linux go run main.go &
-        sleep 100
-        go test -run ^TestApp$ ./tests
-        
-        
+      - name: Verify module dependencies
+        run: go mod tidy -diff
+
+      - name: Start local server
+        id: server
+        run: go run .
+        background: true
+
+      - name: Wait for local server
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent --output /dev/null "http://localhost:${TODO_PORT}/"; then
+              exit 0
+            fi
+
+            sleep 1
+          done
+
+          echo "Server did not become ready in time"
+          exit 1
+
+      - name: Run TestApp
+        run: go test -run '^TestApp$' ./tests
+
+      - name: Run TestDB
+        run: go test -run '^TestDB$' ./tests
+
+      - name: Run TestNextDate
+        run: go test -run '^TestNextDate$' ./tests
+
+      - name: Run TestAddTask
+        run: go test -run '^TestAddTask$' ./tests
+
+      - name: Run TestTasks
+        run: go test -run '^TestTasks$' ./tests
+
+      - name: Run TestTask & TestEditTask
+        run: |
+          go test -run '^TestTask$' ./tests
+          go test -run '^TestEditTask$' ./tests
+
+      - name: Run TestDone & TestDelTask
+        run: |
+          go test -run '^TestDone$' ./tests
+          go test -run '^TestDelTask$' ./tests
+
+      - name: Stop local server
+        cancel: server
